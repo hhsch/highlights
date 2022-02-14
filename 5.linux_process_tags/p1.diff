@@ -1,0 +1,189 @@
+diff --git a/arch/x86/entry/syscalls/syscall_64.tbl b/arch/x86/entry/syscalls/syscall_64.tbl
+index f0b1709a5..52a9c618c 100644
+--- a/arch/x86/entry/syscalls/syscall_64.tbl
++++ b/arch/x86/entry/syscalls/syscall_64.tbl
+@@ -343,6 +343,8 @@
+ 332	common	statx			__x64_sys_statx
+ 333	common	io_pgetevents		__x64_sys_io_pgetevents
+ 334	common	rseq			__x64_sys_rseq
++335	common	get_tag			__x64_sys_get_tag
++336	common	set_tag			__x64_sys_set_tag
+ 
+ #
+ # x32-specific system call numbers start at 512 to avoid cache impact
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index bc6026cdb..b365622ad 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1210,6 +1210,9 @@ struct task_struct {
+ 	unsigned long			prev_lowest_stack;
+ #endif
+ 
++	// Tag for COP6400 P1
++	u32				tag;
++
+ 	/*
+ 	 * New fields for task_struct should be added above here, so that
+ 	 * they are included in the randomized portion of task_struct.
+diff --git a/init/init_task.c b/init/init_task.c
+index 5aebe3be4..590432cc5 100644
+--- a/init/init_task.c
++++ b/init/init_task.c
+@@ -179,7 +179,9 @@ struct task_struct init_task
+ #ifdef CONFIG_SECURITY
+ 	.security	= NULL,
+ #endif
++	.tag 		= 0,
+ };
++// COP6400 init process has tag of zero (defined in above line)
+ EXPORT_SYMBOL(init_task);
+ 
+ /*
+diff --git a/kernel/fork.c b/kernel/fork.c
+index f9a8d31f0..236f89d32 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -1987,6 +1987,10 @@ static __latent_entropy struct task_struct *copy_process(
+ 	INIT_LIST_HEAD(&p->pi_state_list);
+ 	p->pi_state_cache = NULL;
+ #endif
++
++	// COP6400 forked processes inherit tag of parent
++	p->tag = current->tag;
++
+ 	/*
+ 	 * sigaltstack should be cleared when sharing the same VM
+ 	 */
+diff --git a/kernel/sys.c b/kernel/sys.c
+index e33991478..ea816eb00 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -2663,3 +2663,128 @@ COMPAT_SYSCALL_DEFINE1(sysinfo, struct compat_sysinfo __user *, info)
+ 	return 0;
+ }
+ #endif /* CONFIG_COMPAT */
++
++// Syscalls for COP6400 PR1
++SYSCALL_DEFINE1(get_tag, int, pid)
++{
++  int tag;
++  struct task_struct *tsk;
++
++  // Lock access
++  rcu_read_lock();
++
++  // Get process table entry
++  tsk = find_task_by_vpid(pid);
++
++  // Ensure a task was actually found
++  if (!tsk) {
++    rcu_read_unlock();
++    return -ESRCH;
++  }
++
++  // Retrieve tag
++  tag = tsk->tag;
++
++  rcu_read_unlock();
++
++  return tag;
++}
++
++
++// Define some constants for accessing elements of the tag
++
++#define COP6400_TAG_MSB (0x1 << 31) // Highest bit
++#define COP6400_TAG_BITMAP (0x7ffffffc) // All 1's, less MSB and two LSB's
++#define COP6400_TAG_LEVEL (0x3) // Two LSB's
++
++SYSCALL_DEFINE2(set_tag, int, pid, int, new_tag)
++{
++  struct task_struct *tsk;
++  uid_t euid;
++  pid_t nr;
++  int current_tag;
++
++
++  // Ensure valid MSB
++  if (new_tag & COP6400_TAG_MSB)
++    return -EINVAL;
++
++  // Lock to access process table
++  rcu_read_lock();
++
++  // User + pid info of calling process
++  euid = task_euid(current).val;
++  nr = task_pid_nr(current);
++
++  // Root case
++  if (euid == 0) {
++    // Retrieve task as in get_tag
++    tsk = find_task_by_vpid(pid);
++
++    // Ensure process exists
++    if (!tsk) {
++      rcu_read_unlock();
++      return -ESRCH;
++    }
++
++    // Get copy so lock can release
++    get_task_struct(tsk);
++
++    // Drop lock
++    rcu_read_unlock();
++
++    // Update process
++    tsk->tag = new_tag;
++
++    // Store back
++    put_task_struct(tsk);
++
++    return new_tag;
++
++  } else if (nr == pid) {
++    // Self case
++    // No need to retrieve task, it is ourself
++    tsk = current;
++
++    // Get copy
++    get_task_struct(tsk);
++    rcu_read_unlock();
++
++    current_tag = tsk->tag;
++
++    // We cannot raise our own level
++    if ( (new_tag & COP6400_TAG_LEVEL)
++	 > (current_tag & COP6400_TAG_LEVEL) )
++      {
++	return -EACCES;
++      }
++
++    // We cannot increase a bit of our own bitmap
++    /* If p represents a bit of the new tag, and
++     * q represents a bit of the current tag, then
++     * (p and (not q)) = 1 precisely when p = 1 and
++     * q = 0, which is the only condition not allowed.
++     * Thus, if any bit of the bitmap meets this
++     * condition, then the operation is forbidden.
++     */
++
++    if ( (new_tag & ~current_tag) & COP6400_TAG_BITMAP)
++      {
++	return -EACCES;
++      }
++
++    // Finally, we are free to set the tag
++    tsk->tag = new_tag;
++    put_task_struct(tsk);
++
++    return new_tag;
++
++  } else {
++
++    // If neither above case, then this is not allowed
++    rcu_read_unlock();
++    return -EACCES;
++
++  }
++
++}

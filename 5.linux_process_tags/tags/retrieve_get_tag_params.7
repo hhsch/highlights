@@ -1,0 +1,27 @@
+.TH TAG_HARNESS 7 "2020-03-01" "Linux" "COP6400 P1 - Harness functions"
+.SH NAME
+retrieve_get_tag_params, retrieve_set_tag_params, interpret_get_tag_result, interpret_set_tag_result \- translator for tag-related syscalls
+.SH SYNOPSIS
+.B #include <harness.h>
+.PP
+.B int *retrieve_get_tag_params(int pid);
+.br
+.B int *retrieve_set_tag_params(int pid, int new_tag);
+.br
+.B int interpret_get_tag_result(int ret_value);
+.br
+.B int interpret_set_tag_result(int ret_value);
+.SH DESCRIPTION
+These functions may be used together to emulate the behavior of \fBget_tag\\set_tag(3)\fR by manually making the respective syscall.
+.PP
+\fBretrieve_get_tag_params\fR() and \fBretrieve_set_tag_params\fR() take the same parameters as their respective syscall equivalents, and return a pointer to an array of parameters to be used in making the actual syscall. This array is dynamically allocated after each call, so should be freed after use.
+.PP
+\fBinterpret_get_tag_result\fR() and \fBinterpret_set_tag_result\fR() accept the return value from their corresponding syscall, and return the same result that \fBget_tag/set_tag(3)\fR would have. That is, successful returns are passed through unaltered, and on a syscall error, -1 is returned.
+.SH ERRORS
+These functions themselves do not return errors. If the syscall returns an error, that is passed through from the interpret functions as a result of -1.
+.SH NOTES
+Using a retrieve function to make a syscall and then passing the return to interpret, will return the same value as using the library functions \fBget_tag/set_tag(3)\fR.
+.SH SEE ALSO
+.B get_tag(2), set_tag(2), get_tag(3), set_tag(3)
+.SH AUTHOR
+Hunter Schwartz (schwartzh@ufl.edu), University of Florida, CISE Department

@@ -1,0 +1,42 @@
+Project 1(7)	COP6400 P1 - Report	Project 1(7)
+
+(Harold) Hunter Schwartz
+COP4600 Operating Systems
+Project 1 - Syscalls
+1 Mar 2020
+
+MODIFIED FILES
+	(1) include/linux/sched.h
+	(2) init/init_task.c
+	(3) kernel/fork.c
+	(4) arch/x86/entry/syscalls/syscall_64.tbl
+	(5) kernel/sys.c
+
+
+CHANGES MADE
+
+(1) This file contains the task_struct definition, which are the fields of an entry in the process table of the kernel. Here is where I added the tag field, so processes can have a tag associated with them.
+
+(2) The tag field is not well-defined yet, so I added a line to the initialization of the init process so that its tag value begins equal to 0.
+
+(3) The init process's tag is set, but processes forked from init will not inherit any value yet. I changed the fork command to copy the tag value from the calling process into the new process. This means every process forked from init will have a well-defined tag, and processes will inherit their tag from their parent.
+
+(4) This file contains a list of syscalls available to the kernel, which is used by scripts to create the boilerplate code for a syscall. Here is where I added my syscalls by giving them a name and an associated number.
+
+(5) In this file I implemented the actual functionality of the syscalls. This is where miscellaneous syscalls can be found. I used the SYSCALL_DEFINEX macro to implement a syscall with X parameters, and the defintion of the syscall follows.
+
+
+TESTING
+
+After implementing the library functions, it became easier to test the syscalls in various scenarios. I wrote several small programs which tested different aspects of the syscall functionality, such as setting the tag of any process as root, setting one's own tag only if certain conditions are met, and assuring that the tag is passed down by a fork(). I also ran the automated tests from the provided test script, for which all 6 tests reported passing. Since this script does not test the harness functions, I wrote a simple program to ensure that the harness functions work as expected. Once I was fairly certain everything was working, I restored the virtual machine to its unaltered state and applied the p1.diff and freshly installed the kernel modifications, and then ran the same tests to make sure the installation went smoothly.
+
+
+KNOWN BUGS
+
+As far as I can tell, no bugs have been observed. I have tried to be careful in testing and reviewing my implementation, and paid attention to other similar syscalls already in the kernel to glean some ideas. In particular, I attempted to use the RCU capabilities of the kernel, so my code should be free of race conditions.
+
+
+SCREENCAST
+	https://youtu.be/s9AepSsYYHA
+
+		2020-03-01	Project 1(7)

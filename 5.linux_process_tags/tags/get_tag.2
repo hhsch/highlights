@@ -1,0 +1,28 @@
+.TH XET_TAG 2 "2020-03-01" "Linux" "COP6400 P1 - Syscalls"
+.SH NAME
+get_tag, set_tag \- manipulate process tags
+.SH SYNOPSIS
+.B #include <tags.h>
+.PP
+.B int get_tag(int \fIpid\fB);
+.br
+.B int set_tag(int \fIpid\fB, int \fInew_tag\fB);
+.SH DESCRIPTION
+Call with \fBsyscall(2)\fR using syscall numbers \fISYS_get_tag\fR and \fISYS_set_tag\fR.
+.PP
+\fBget_tag\fR() returns the \fItag\fR value of the process associated with the given process ID (PID), if such a process exists.
+.PP
+\fBset_tag\fR() attempts to set the \fItag\fR value of the given process to the requested \fInew_tag\fR. Valids tags are 32-bit integers for which the most significant bit (bit 31) is set to 0. Tags can be set to any valid value by uid 0. Processes running as non-root users may only set their own tag, subject to the follwing conditions:
+.RS
+> Bits 0-1 represent the level of the tag; the level may not be raised.
+.br
+> Bits 2-30 represent the bitmap of the tag; bits in this range may not be set to 1 if they are currently 0.
+.RE
+.SH ERRORS
+\fBget_tag\fR() returns -ESRCH if the process associated with the given PID could not be found.
+.PP
+\fBset_tag\fR() returns -ESRCH if the process associated with the given PID could not be found. The call returns -EINVAL if given tag is not a valid tag. The call returns -EACCES if the process is not allowed to set the tag of the given process to the given value.
+.SH SEE ALSO
+.B get_tag(3), set_tag(3)
+.SH AUTHOR
+Hunter Schwartz (schwartzh@ufl.edu), University of Florida, CISE Department
